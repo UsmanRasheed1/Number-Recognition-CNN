@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Drawing Board</title>
+    <!-- Bootstrap CSS -->
+    <link href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body {
+            background-image: url('/static/images/wallpaper.jpg'); /* Set background image */
+            background-size: cover; /* Cover the entire background */
+            color: black; /* Set text color to black */
+            font-family: 'Segoe UI', sans-serif; /* Use fancy font */
+        }
+
+        #drawing-board {
+            border: 1px solid black;
+            width: 180px; /* Display width */
+            height: 280px; /* Display height */
+            background-color: white;
+            margin-bottom: 20px; /* Add margin for spacing */
+        }
+
+        .container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            margin-top: 20px; /* Add margin for spacing */
+            background-color: rgba(255, 255, 255, 0.8); /* Add a light background to make text readable */
+            padding: 20px;
+            border-radius: 10px;
+        }
+
+        .controls {
+            margin-top: 10px;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <h1 style="text-align: center;">Draw a Digit on the board, and choose your preferred NN Model!!</h1>
+        <canvas id="drawing-board" width="180" height="280"></canvas>
+        <div class="controls">
+            <select id="model-choice" class="form-control" onchange="changeModel()">
+                <option value="model 1">Model 1</option>
+                <option value="model 2">Model 2</option>
+                <option value="model 3">Model 3</option>
+            </select>
+            <button onclick="submitDrawing()" class="btn btn-primary mt-2">Submit</button>
+            <button onclick="undoDrawing()" class="btn btn-secondary ml-2 mt-2">Undo</button>
+        </div>
+        <div id="prediction-result" class="mt-3"></div> <!-- Display predicted number here -->
+    </div>
+
+    <!-- Bootstrap JS and dependencies -->
+    <script src="https://code.jquery.com/jquery-3.5.1.slim.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.9.1/dist/umd/popper.min.js"></script>
+    <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
+
+    <script>
+        const canvas = document.getElementById('drawing-board');
+        const context = canvas.getContext('2d');
+        let isDrawing = false;
+        let lastX = 0;
+        let lastY = 0;
+        let drawingHistory = [];
+        let ctrlPressed = false;
+        let modelChanged = false; // Flag to track model change
+        context.lineWidth = 3;
+        context.strokeStyle = 'blue'; 
+
+        canvas.addEventListener('mousedown', startDrawing);
+        canvas.addEventListener('mousemove', draw);
+        canvas.addEventListener('mouseup', endDrawing);
+        canvas.addEventListener('mouseout', endDrawing);
+
+        canvas.addEventListener('touchstart', startDrawing);
+        canvas.addEventListener('touchmove', draw);
+        canvas.addEventListener('touchend', endDrawing);
+
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Control') ctrlPressed = true;
+            if (e.key === 'z' && ctrlPressed) undoDrawing();
+        });
+
+        document.addEventListener('keyup', function(e) {
+            if (e.key === 'Control') ctrlPressed = false;
+        });
+
+        function startDrawing(e) {
+            isDrawing = true;
+            [lastX, lastY] = [e.offsetX || e.touches[0].clientX - canvas.offsetLeft, e.offsetY || e.touches[0].clientY - canvas.offsetTop];
+        }
+
+        function draw(e) {
+            if (!isDrawing) return;
+            const x = e.offsetX || e.touches[0].clientX - canvas.offsetLeft;
+            const y = e.offsetY || e.touches[0].clientY - canvas.offsetTop;
+            context.beginPath();
+            context.moveTo(lastX, lastY);
+            context.lineTo(x, y);
+            context.stroke();
+            [lastX, lastY] = [x, y];
+        }
+
+        function endDrawing() {
+            isDrawing = false;
+            if (!modelChanged) { // Check if model has changed before pushing to history
+                drawingHistory.push(canvas.toDataURL('image/jpeg'));
+            }
+            modelChanged = false; // Reset model change flag
+        }
+
+        function undoDrawing() {
+            if (drawingHistory.length > 0) {
+                drawingHistory.pop();
+                redraw();
+            }
+        }
+
+        function redraw() {
+            context.clearRect(0, 0, canvas.width, canvas.height);
+            context.fillStyle = 'white'; // Ensure the background is white
+            context.fillRect(0, 0, canvas.width, canvas.height);
+
+            drawingHistory.forEach(dataURL => {
+                const img = new Image();
+                img.src = dataURL;
+                img.onload = () => {
+                    context.drawImage(img, 0, 0);
+                };
+            });
+        }
+
+        function submitDrawing() {
+            const dataURL = canvas.toDataURL('image/jpeg'); // Get the drawing as JPEG
+            const modelChoice = document.getElementById('model-choice').value;
+
+            const formData = new FormData();
+            formData.append('image', dataURL);
+            formData.append('model_choice', modelChoice);
+
+            fetch('/submit', {  // Assuming your Flask app is running on localhost:5000
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                const predictionResult = document.getElementById('prediction-result');
+                predictionResult.innerHTML = `On <b>${data.model_choice}</b> the AI predicted the number <b>${data.predicted_class}</b> with the probability <b>${data.probability}%</b>`;
+                
+            });
+        }
+
+        function changeModel() {
+            modelChanged = true; // Set flag when model changes
+        }
+    </script>
+</body>
+
+</html>
